@@ -20,6 +20,7 @@
  * - No Moodle message notification is sent yet.
  *
  * @package    mod_crossduel
+ * @copyright  Johan Venter
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
@@ -647,7 +648,7 @@ function crossduel_view_touch_presence(int $crossduelid, int $userid): void {
  * @return string
  */
 function crossduel_view_get_presence_label(int $lastseen): string {
-    return 'In this activity now · Last seen: ' . userdate($lastseen);
+    return get_string('presence_lastseen', 'crossduel', userdate($lastseen));
 }
 
 /**
@@ -1082,8 +1083,19 @@ function crossduel_view_finalize_multiplayer_if_complete(stdClass $game, array $
 }
 
 
-$completion = new completion_info($course);
-$completion->set_module_viewed($cm);
+if (!$ajax) {
+    $completion = new completion_info($course);
+    $completion->set_module_viewed($cm);
+
+    $event = \mod_crossduel\event\course_module_viewed::create([
+        'objectid' => $crossduel->id,
+        'context' => $context,
+    ]);
+    $event->add_record_snapshot('course', $course);
+    $event->add_record_snapshot('course_modules', $cm);
+    $event->add_record_snapshot('crossduel', $crossduel);
+    $event->trigger();
+}
 
 /*
  * -------------------------------------------------------------
@@ -1101,7 +1113,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $inviteuserid = required_param('inviteuserid', PARAM_INT);
 
         if ($currentmultiplayergame) {
-            redirect($crossduelviewurl, 'You already have an active or pending multiplayer game in this activity.', null, \core\output\notification::NOTIFY_WARNING);
+            redirect($crossduelviewurl, get_string('err_active_or_pending', 'crossduel'), null, \core\output\notification::NOTIFY_WARNING);
         } else {
             $availableusers = crossduel_view_get_available_multiplayer_partners($crossduel, $course, $context, (int)$USER->id);
             $availableids = array_map(function($u) {
@@ -1109,10 +1121,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }, $availableusers);
 
             if (!in_array($inviteuserid, $availableids, true)) {
-                redirect($crossduelviewurl, 'That learner is no longer available for this activity.', null, \core\output\notification::NOTIFY_WARNING);
+                redirect($crossduelviewurl, get_string('err_learner_not_available', 'crossduel'), null, \core\output\notification::NOTIFY_WARNING);
             } else {
                 crossduel_view_create_invitation($crossduel, (int)$USER->id, $inviteuserid);
-                redirect($crossduelviewurl, 'Invitation sent successfully.', null, \core\output\notification::NOTIFY_SUCCESS);
+                redirect($crossduelviewurl, get_string('invitation_sent_success', 'crossduel'), null, \core\output\notification::NOTIFY_SUCCESS);
             }
         }
     }
@@ -1126,17 +1138,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$game ||
             (int)$game->crossduelid !== (int)$crossduel->id ||
             (int)$game->playerb !== (int)$USER->id) {
-            redirect($crossduelviewurl, 'This invitation is no longer available.', null, \core\output\notification::NOTIFY_WARNING);
+            redirect($crossduelviewurl, get_string('err_invitation_unavailable', 'crossduel'), null, \core\output\notification::NOTIFY_WARNING);
         } else if ($game->status === 'active') {
             // A stale second click or refresh after activation should not be treated as an error.
-            redirect($crossduelviewurl, 'This multiplayer game is already active.', null, \core\output\notification::NOTIFY_SUCCESS);
+            redirect($crossduelviewurl, get_string('mp_already_active', 'crossduel'), null, \core\output\notification::NOTIFY_SUCCESS);
         } else if ($game->status !== 'invited') {
-            redirect($crossduelviewurl, 'This invitation is no longer available.', null, \core\output\notification::NOTIFY_WARNING);
+            redirect($crossduelviewurl, get_string('err_invitation_unavailable', 'crossduel'), null, \core\output\notification::NOTIFY_WARNING);
         } else if ($currentmultiplayergame && (int)$currentmultiplayergame->id !== (int)$game->id) {
-            redirect($crossduelviewurl, 'You already have another active or pending multiplayer game in this activity.', null, \core\output\notification::NOTIFY_WARNING);
+            redirect($crossduelviewurl, get_string('err_another_active_or_pending', 'crossduel'), null, \core\output\notification::NOTIFY_WARNING);
         } else {
             crossduel_view_accept_invitation($game);
-            redirect($crossduelviewurl, 'Invitation accepted. The multiplayer game is now active.', null, \core\output\notification::NOTIFY_SUCCESS);
+            redirect($crossduelviewurl, get_string('invitation_accepted_active', 'crossduel'), null, \core\output\notification::NOTIFY_SUCCESS);
         }
     }
 
@@ -1149,16 +1161,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$game ||
             (int)$game->crossduelid !== (int)$crossduel->id ||
             (int)$game->playerb !== (int)$USER->id) {
-            redirect($crossduelviewurl, 'This invitation is no longer available.', null, \core\output\notification::NOTIFY_WARNING);
+            redirect($crossduelviewurl, get_string('err_invitation_unavailable', 'crossduel'), null, \core\output\notification::NOTIFY_WARNING);
         } else if ($game->status === 'declined') {
-            redirect($crossduelviewurl, 'This invitation was already declined.', null, \core\output\notification::NOTIFY_SUCCESS);
+            redirect($crossduelviewurl, get_string('invitation_already_declined', 'crossduel'), null, \core\output\notification::NOTIFY_SUCCESS);
         } else if ($game->status === 'active') {
-            redirect($crossduelviewurl, 'This multiplayer game is already active.', null, \core\output\notification::NOTIFY_SUCCESS);
+            redirect($crossduelviewurl, get_string('mp_already_active', 'crossduel'), null, \core\output\notification::NOTIFY_SUCCESS);
         } else if ($game->status !== 'invited') {
-            redirect($crossduelviewurl, 'This invitation is no longer available.', null, \core\output\notification::NOTIFY_WARNING);
+            redirect($crossduelviewurl, get_string('err_invitation_unavailable', 'crossduel'), null, \core\output\notification::NOTIFY_WARNING);
         } else {
             crossduel_view_decline_invitation($game);
-            redirect($crossduelviewurl, 'Invitation declined.', null, \core\output\notification::NOTIFY_SUCCESS);
+            redirect($crossduelviewurl, get_string('invitation_declined', 'crossduel'), null, \core\output\notification::NOTIFY_SUCCESS);
         }
     }
 }
@@ -1229,16 +1241,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && optional_param('submitmultiplayeran
     $currentmultiplayergame = crossduel_view_get_user_current_multiplayer_game((int)$crossduel->id, (int)$USER->id);
 
     if (!$currentmultiplayergame || $currentmultiplayergame->status !== 'active') {
-        redirect($crossduelviewurl, 'There is no active multiplayer game for this activity.', null, \core\output\notification::NOTIFY_WARNING);
+        redirect($crossduelviewurl, get_string('mp_no_active', 'crossduel'), null, \core\output\notification::NOTIFY_WARNING);
     }
 
     if ((int)$currentmultiplayergame->currentturn !== (int)$USER->id) {
-        redirect($crossduelviewurl, 'It is not your turn.', null, \core\output\notification::NOTIFY_WARNING);
+        redirect($crossduelviewurl, get_string('mp_not_turn', 'crossduel'), null, \core\output\notification::NOTIFY_WARNING);
     }
 
     $userdirection = crossduel_view_get_multiplayer_user_direction($currentmultiplayergame, (int)$USER->id);
     if ($userdirection === '') {
-        redirect($crossduelviewurl, 'Your multiplayer role is not assigned correctly.', null, \core\output\notification::NOTIFY_WARNING);
+        redirect($crossduelviewurl, get_string('mp_role_error', 'crossduel'), null, \core\output\notification::NOTIFY_WARNING);
     }
 
     $layoutrows_for_submit = crossduel_view_get_approved_layout_rows((int)$crossduel->id);
@@ -1254,20 +1266,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && optional_param('submitmultiplayeran
     }
 
     if (!$targetrow) {
-        redirect($crossduelviewurl, 'The selected multiplayer clue could not be found.', null, \core\output\notification::NOTIFY_WARNING);
+        redirect($crossduelviewurl, get_string('mp_clue_missing', 'crossduel'), null, \core\output\notification::NOTIFY_WARNING);
     }
 
     if (!crossduel_view_multiplayer_word_allowed($targetrow, $userdirection)) {
-        redirect($crossduelviewurl, 'You may only answer clues from your own multiplayer direction.', null, \core\output\notification::NOTIFY_WARNING);
+        redirect($crossduelviewurl, get_string('mp_wrong_direction', 'crossduel'), null, \core\output\notification::NOTIFY_WARNING);
     }
 
     $multiplayersolved = crossduel_view_get_multiplayer_solved_word_ids($currentmultiplayergame);
     if (isset($multiplayersolved[(int)$targetrow->wordid])) {
-        redirect($crossduelviewurl, 'That multiplayer clue has already been solved.', null, \core\output\notification::NOTIFY_WARNING);
+        redirect($crossduelviewurl, get_string('mp_already_solved', 'crossduel'), null, \core\output\notification::NOTIFY_WARNING);
     }
 
     if ($submittedanswer === '') {
-        redirect($crossduelviewurl, 'Please type an answer before submitting.', null, \core\output\notification::NOTIFY_WARNING);
+        redirect($crossduelviewurl, get_string('error_emptyanswer', 'crossduel'), null, \core\output\notification::NOTIFY_WARNING);
     }
 
     $normalizedanswer = core_text::strtoupper($submittedanswer);
@@ -1279,9 +1291,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && optional_param('submitmultiplayeran
     crossduel_view_finalize_multiplayer_if_complete($currentmultiplayergame, $layoutrows_for_submit);
 
     if ($correct) {
-        redirect($crossduelviewurl, 'Correct multiplayer answer submitted. Refresh the other browser to see the shared update.', null, \core\output\notification::NOTIFY_SUCCESS);
+        redirect($crossduelviewurl, get_string('mp_correct', 'crossduel'), null, \core\output\notification::NOTIFY_SUCCESS);
     } else {
-        redirect($crossduelviewurl, 'That multiplayer answer is not correct. Turn has passed to the other player.', null, \core\output\notification::NOTIFY_WARNING);
+        redirect($crossduelviewurl, get_string('mp_incorrect', 'crossduel'), null, \core\output\notification::NOTIFY_WARNING);
     }
 }
 
@@ -1326,9 +1338,9 @@ if (!empty($crossduel->layoutapproved)) {
             }
 
             if (!$targetrow) {
-                redirect($crossduelviewurl, 'The selected clue could not be found in this approved layout.', null, \core\output\notification::NOTIFY_WARNING);
+                redirect($crossduelviewurl, get_string('error_notfound', 'crossduel'), null, \core\output\notification::NOTIFY_WARNING);
             } else if ($submittedanswer === '') {
-                redirect($crossduelviewurl, 'Please type an answer before submitting.', null, \core\output\notification::NOTIFY_WARNING);
+                redirect($crossduelviewurl, get_string('error_emptyanswer', 'crossduel'), null, \core\output\notification::NOTIFY_WARNING);
             } else {
                 $normalizedanswer = core_text::strtoupper($submittedanswer);
                 $normalizedanswer = preg_replace('/[^[:alnum:]]/u', '', $normalizedanswer);
@@ -1344,9 +1356,9 @@ if (!empty($crossduel->layoutapproved)) {
 
                 if ($correct) {
                     crossduel_update_user_grade($crossduel, (int)$USER->id);
-                    redirect($crossduelviewurl, 'Correct. That word is now revealed on your board and your grade has been updated.', null, \core\output\notification::NOTIFY_SUCCESS);
+                    redirect($crossduelviewurl, get_string('correct_answer', 'crossduel'), null, \core\output\notification::NOTIFY_SUCCESS);
                 } else {
-                    redirect($crossduelviewurl, 'That answer is not correct yet. Please try again.', null, \core\output\notification::NOTIFY_WARNING);
+                    redirect($crossduelviewurl, get_string('incorrect_answer', 'crossduel'), null, \core\output\notification::NOTIFY_WARNING);
                 }
             }
         }
@@ -1378,7 +1390,7 @@ $allwordssolved = !empty($layoutrows);
 
 if (!empty($layoutrows)) {
     foreach ($layoutrows as $row) {
-        $directionlabel = ($row->direction === 'H') ? 'Across' : 'Down';
+        $directionlabel = ($row->direction === 'H') ? get_string('across', 'crossduel') : get_string('down', 'crossduel');
         $issolved = isset($solvedwordids[(int)$row->wordid]);
 
         if (!$issolved && $firstunsolvedwordid === 0) {
@@ -1420,7 +1432,7 @@ if (!empty($layoutrows) && $currentmultiplayergame && in_array($currentmultiplay
             continue;
         }
 
-        $directionlabel = ($row->direction === 'H') ? 'Across' : 'Down';
+        $directionlabel = ($row->direction === 'H') ? get_string('across', 'crossduel') : get_string('down', 'crossduel');
         $multiplayerclueselectoptions[] = [
             'wordid' => (int)$row->wordid,
             'label' => $row->cluenumber . ' ' . $directionlabel . ' - ' . $row->cluetext,
@@ -1630,14 +1642,14 @@ if (empty($crossduel->layoutapproved)) {
     echo html_writer::start_div('crossduel-status-card');
     echo html_writer::tag(
         'p',
-        'This activity has been created, but the crossword layout has not yet been previewed and approved by the teacher.'
+        get_string('layoutnotready', 'crossduel')
     );
 
     $previewurl = new moodle_url('/mod/crossduel/preview.php', ['id' => $cm->id]);
 
     if (has_capability('mod/crossduel:addinstance', $context)) {
         echo html_writer::div(
-            html_writer::link($previewurl, 'Open preview page', ['class' => 'btn btn-secondary']),
+            html_writer::link($previewurl, get_string('openpreview', 'crossduel'), ['class' => 'btn btn-secondary']),
             'crossduel-action-row'
         );
     }
@@ -1650,14 +1662,14 @@ if (empty($crossduel->layoutapproved)) {
 
 if (empty($layoutrows)) {
     echo $OUTPUT->notification(
-        'This activity says the layout is approved, but no stored layout rows were found.',
+        get_string('layoutmissingrows', 'crossduel'),
         'warning'
     );
 
     echo html_writer::start_div('crossduel-status-card');
     echo html_writer::tag(
         'p',
-        'The teacher may need to return to the preview page and approve the draft again.'
+        get_string('layoutreapprove', 'crossduel')
     );
     echo html_writer::end_div();
 
@@ -1666,23 +1678,23 @@ if (empty($layoutrows)) {
 }
 
 echo html_writer::start_div('crossduel-hero');
-echo html_writer::tag('h2', 'Cross Duel board');
+echo html_writer::tag('h2', get_string('boardtitle', 'crossduel'));
 if ($currentmultiplayergame && $currentmultiplayergame->status === 'active') {
     echo html_writer::tag(
         'p',
-        'You are now in a multiplayer Cross Duel session. Refresh the page to see your partner\'s latest move.',
+        get_string('subtitle_active', 'crossduel'),
         ['class' => 'crossduel-subtitle']
     );
 } else if ($currentmultiplayergame && $currentmultiplayergame->status === 'completed') {
     echo html_writer::tag(
         'p',
-        'This multiplayer Cross Duel session has been completed successfully. The final shared board remains visible below.',
+        get_string('subtitle_completed', 'crossduel'),
         ['class' => 'crossduel-subtitle']
     );
 } else {
     echo html_writer::tag(
         'p',
-        'You can solve this puzzle one clue at a time, or invite another learner to start a multiplayer Cross Duel session.',
+        get_string('subtitle_single', 'crossduel'),
         ['class' => 'crossduel-subtitle']
     );
 }
@@ -1694,7 +1706,7 @@ echo html_writer::end_div();
  * -------------------------------------------------------------
  */
 echo html_writer::start_div('crossduel-multiplayer-card');
-echo html_writer::tag('h3', 'Play with another learner');
+echo html_writer::tag('h3', get_string('multiplayer_title', 'crossduel'));
 
 if ($currentmultiplayergame) {
     $opponentid = ((int)$currentmultiplayergame->playera === (int)$USER->id)
@@ -1702,15 +1714,15 @@ if ($currentmultiplayergame) {
         : (int)$currentmultiplayergame->playera;
 
     $opponent = core_user::get_user($opponentid, '*', IGNORE_MISSING);
-    $opponentname = $opponent ? fullname($opponent) : 'Unknown learner';
+    $opponentname = $opponent ? fullname($opponent) : get_string('unknownlearner', 'crossduel');
 
     if ($currentmultiplayergame->status === 'invited' && (int)$currentmultiplayergame->playera === (int)$USER->id) {
-        echo html_writer::tag('p', 'Invitation sent to ' . s($opponentname) . '.');
-        echo html_writer::tag('p', 'Waiting for response.', ['class' => 'crossduel-small-note']);
-        echo html_writer::tag('p', 'Single-player answering remains available until the invitation is accepted.', ['class' => 'crossduel-small-note']);
+        echo html_writer::tag('p', get_string('invitation_sent', 'crossduel', s($opponentname)));
+        echo html_writer::tag('p', get_string('waiting_response', 'crossduel'), ['class' => 'crossduel-small-note']);
+        echo html_writer::tag('p', get_string('singleplayer_available', 'crossduel'), ['class' => 'crossduel-small-note']);
     } else if ($currentmultiplayergame->status === 'invited' && (int)$currentmultiplayergame->playerb === (int)$USER->id) {
-        echo html_writer::tag('p', s($opponentname) . ' has invited you to play Cross Duel.');
-        echo html_writer::tag('p', 'Accepting will activate multiplayer lock mode for both players.', ['class' => 'crossduel-small-note']);
+        echo html_writer::tag('p', get_string('invited_you', 'crossduel', s($opponentname)));
+        echo html_writer::tag('p', get_string('accept_notice', 'crossduel'), ['class' => 'crossduel-small-note']);
 
         echo html_writer::start_div('crossduel-action-row');
 
@@ -1721,7 +1733,7 @@ if ($currentmultiplayergame) {
         ]);
         echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'sesskey', 'value' => sesskey()]);
         echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'gameid', 'value' => (int)$currentmultiplayergame->id]);
-        echo html_writer::empty_tag('input', ['type' => 'submit', 'name' => 'acceptinvite', 'value' => 'Accept', 'class' => 'btn btn-primary']);
+        echo html_writer::empty_tag('input', ['type' => 'submit', 'name' => 'acceptinvite', 'value' => get_string('accept', 'crossduel'), 'class' => 'btn btn-primary']);
         echo html_writer::end_tag('form');
 
         echo html_writer::start_tag('form', [
@@ -1731,50 +1743,50 @@ if ($currentmultiplayergame) {
         ]);
         echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'sesskey', 'value' => sesskey()]);
         echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'gameid', 'value' => (int)$currentmultiplayergame->id]);
-        echo html_writer::empty_tag('input', ['type' => 'submit', 'name' => 'declineinvite', 'value' => 'Decline', 'class' => 'btn btn-secondary']);
+        echo html_writer::empty_tag('input', ['type' => 'submit', 'name' => 'declineinvite', 'value' => get_string('decline', 'crossduel'), 'class' => 'btn btn-secondary']);
         echo html_writer::end_tag('form');
 
         echo html_writer::end_div();
 
-        echo html_writer::tag('p', 'Single-player answering remains available until you accept the invitation.', ['class' => 'crossduel-small-note']);
+        echo html_writer::tag('p', get_string('singleplayer_available_until_accept', 'crossduel'), ['class' => 'crossduel-small-note']);
     } else if ($currentmultiplayergame->status === 'active') {
         $rolelabel = crossduel_view_get_multiplayer_role_label($currentmultiplayergame, (int)$USER->id);
         $turnuser = core_user::get_user((int)$currentmultiplayergame->currentturn, '*', IGNORE_MISSING);
-        $turnname = $turnuser ? fullname($turnuser) : 'Unknown learner';
+        $turnname = $turnuser ? fullname($turnuser) : get_string('unknownlearner', 'crossduel');
 
-        echo html_writer::tag('p', 'You are now in a multiplayer Cross Duel session.');
+        echo html_writer::tag('p', get_string('already_active', 'crossduel'));
         echo html_writer::start_tag('ul');
-        echo html_writer::tag('li', 'Opponent: ' . s($opponentname));
-        echo html_writer::tag('li', 'Your role: ' . s($rolelabel));
-        echo html_writer::tag('li', 'Current turn: ' . s($turnname));
+        echo html_writer::tag('li', get_string('opponent', 'crossduel', s($opponentname)));
+        echo html_writer::tag('li', get_string('yourrole', 'crossduel', s($rolelabel)));
+        echo html_writer::tag('li', get_string('currentturn', 'crossduel', s($turnname)));
         echo html_writer::end_tag('ul');
-        echo html_writer::tag('p', 'Single-player answering is locked while this multiplayer session is active.', ['class' => 'crossduel-small-note']);
-        echo html_writer::tag('p', 'Refresh the page to see your partner\'s latest move.', ['class' => 'crossduel-small-note']);
+        echo html_writer::tag('p', get_string('singleplayer_locked', 'crossduel'), ['class' => 'crossduel-small-note']);
+        echo html_writer::tag('p', get_string('refresh_notice', 'crossduel'), ['class' => 'crossduel-small-note']);
     } else if ($currentmultiplayergame->status === 'completed') {
         $rolelabel = crossduel_view_get_multiplayer_role_label($currentmultiplayergame, (int)$USER->id);
 
-        echo html_writer::tag('p', 'Multiplayer Cross Duel completed ✓');
+        echo html_writer::tag('p', get_string('completed_title', 'crossduel'));
         echo html_writer::start_tag('ul');
-        echo html_writer::tag('li', 'Opponent: ' . s($opponentname));
-        echo html_writer::tag('li', 'Your role: ' . s($rolelabel));
-        echo html_writer::tag('li', 'Final shared status: Completed');
+        echo html_writer::tag('li', get_string('opponent', 'crossduel', s($opponentname)));
+        echo html_writer::tag('li', get_string('yourrole', 'crossduel', s($rolelabel)));
+        echo html_writer::tag('li', get_string('finalsharedstatus_completed', 'crossduel'));
         echo html_writer::end_tag('ul');
-        echo html_writer::tag('p', 'The shared puzzle has been completed. Equal full credit has been awarded to both players.', ['class' => 'crossduel-small-note']);
-        echo html_writer::tag('p', 'The final board remains visible below as the completed multiplayer result.', ['class' => 'crossduel-small-note']);
+        echo html_writer::tag('p', get_string('completed_credit', 'crossduel'), ['class' => 'crossduel-small-note']);
+        echo html_writer::tag('p', get_string('completed_board', 'crossduel'), ['class' => 'crossduel-small-note']);
     }
 } else {
     if (!empty($incominginvites)) {
-        echo html_writer::tag('p', 'You have invitation(s) waiting:');
+        echo html_writer::tag('p', get_string('invites_waiting', 'crossduel'));
         echo html_writer::start_tag('ul', ['class' => 'crossduel-invite-list']);
 
         foreach ($incominginvites as $invite) {
             $inviter = core_user::get_user((int)$invite->playera, '*', IGNORE_MISSING);
-            $invitername = $inviter ? fullname($inviter) : 'Another learner';
+            $invitername = $inviter ? fullname($inviter) : get_string('anotherlearner', 'crossduel');
 
             echo html_writer::start_tag('li', ['class' => 'crossduel-invite-row']);
             echo html_writer::start_div();
-            echo html_writer::tag('div', s($invitername) . ' wants to play Cross Duel with you.');
-            echo html_writer::tag('div', 'Accepting will start the multiplayer session.', ['class' => 'crossduel-small-note']);
+            echo html_writer::tag('div', get_string('invite_prompt', 'crossduel', s($invitername)));
+            echo html_writer::tag('div', get_string('invite_start', 'crossduel'), ['class' => 'crossduel-small-note']);
             echo html_writer::end_div();
 
             echo html_writer::start_div('crossduel-action-row');
@@ -1786,7 +1798,7 @@ if ($currentmultiplayergame) {
             ]);
             echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'sesskey', 'value' => sesskey()]);
             echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'gameid', 'value' => (int)$invite->id]);
-            echo html_writer::empty_tag('input', ['type' => 'submit', 'name' => 'acceptinvite', 'value' => 'Accept', 'class' => 'btn btn-primary']);
+            echo html_writer::empty_tag('input', ['type' => 'submit', 'name' => 'acceptinvite', 'value' => get_string('accept', 'crossduel'), 'class' => 'btn btn-primary']);
             echo html_writer::end_tag('form');
 
             echo html_writer::start_tag('form', [
@@ -1796,7 +1808,7 @@ if ($currentmultiplayergame) {
             ]);
             echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'sesskey', 'value' => sesskey()]);
             echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'gameid', 'value' => (int)$invite->id]);
-            echo html_writer::empty_tag('input', ['type' => 'submit', 'name' => 'declineinvite', 'value' => 'Decline', 'class' => 'btn btn-secondary']);
+            echo html_writer::empty_tag('input', ['type' => 'submit', 'name' => 'declineinvite', 'value' => get_string('decline', 'crossduel'), 'class' => 'btn btn-secondary']);
             echo html_writer::end_tag('form');
 
             echo html_writer::end_div();
@@ -1806,10 +1818,10 @@ if ($currentmultiplayergame) {
         echo html_writer::end_tag('ul');
     }
 
-    echo html_writer::tag('p', 'Available learners are currently in this Cross Duel activity, have not yet passed it, and are not already busy in another Cross Duel game.');
+    echo html_writer::tag('p', get_string('available_learners', 'crossduel'));
 
     if (empty($availablepartners)) {
-        echo html_writer::tag('p', 'No learners are currently available to invite.', ['class' => 'crossduel-small-note']);
+        echo html_writer::tag('p', get_string('no_learners', 'crossduel'), ['class' => 'crossduel-small-note']);
     } else {
         echo html_writer::start_tag('ul', ['class' => 'crossduel-partner-list']);
 
@@ -1827,7 +1839,7 @@ if ($currentmultiplayergame) {
             ]);
             echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'sesskey', 'value' => sesskey()]);
             echo html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'inviteuserid', 'value' => (int)$partner->id]);
-            echo html_writer::empty_tag('input', ['type' => 'submit', 'name' => 'inviteplayer', 'value' => 'Invite', 'class' => 'btn btn-secondary']);
+            echo html_writer::empty_tag('input', ['type' => 'submit', 'name' => 'inviteplayer', 'value' => get_string('invite', 'crossduel'), 'class' => 'btn btn-secondary']);
             echo html_writer::end_tag('form');
 
             echo html_writer::end_tag('li');
@@ -1841,24 +1853,24 @@ echo html_writer::end_div();
 
 if ($allwordssolved && !($currentmultiplayergame && $currentmultiplayergame->status === 'completed')) {
     echo html_writer::start_div('crossduel-complete-card');
-    echo html_writer::tag('h3', 'Puzzle completed ✓');
+    echo html_writer::tag('h3', get_string('puzzle_complete', 'crossduel'));
     echo html_writer::tag(
         'p',
-        'Well done. You have solved all the clues in this Cross Duel activity.'
+        get_string('puzzle_done', 'crossduel')
     );
     echo html_writer::end_div();
 }
 
 if ($currentmultiplayergame && $currentmultiplayergame->status === 'completed') {
     echo html_writer::start_div('crossduel-complete-card');
-    echo html_writer::tag('h3', 'Multiplayer Cross Duel completed ✓');
+    echo html_writer::tag('h3', get_string('completed_title', 'crossduel'));
     echo html_writer::tag(
         'p',
-        'Well done. Both players have successfully completed this assignment.'
+        get_string('multiplayer_done', 'crossduel')
     );
     echo html_writer::tag(
         'p',
-        'The completed shared board remains visible below so that both players can see the final result together.',
+        get_string('multiplayer_done_note', 'crossduel'),
         ['class' => 'crossduel-small-note']
     );
     echo html_writer::end_div();
@@ -1872,19 +1884,19 @@ echo html_writer::start_div('crossduel-layout');
  * -------------------------------------------------------------
  */
 echo html_writer::start_div('crossduel-clues-card');
-echo $OUTPUT->heading('Clues', 3);
+echo $OUTPUT->heading(get_string('clues', 'crossduel'), 3);
 
 echo html_writer::start_div('crossduel-clue-section');
-echo html_writer::tag('h3', 'Across');
+echo html_writer::tag('h3', get_string('across', 'crossduel'));
 
 if (empty($clues['across'])) {
-    echo html_writer::tag('p', 'No Across clues in this approved layout.', ['class' => 'crossduel-note']);
+    echo html_writer::tag('p', get_string('no_across', 'crossduel'), ['class' => 'crossduel-note']);
 } else {
     echo html_writer::start_tag('ul', ['class' => 'crossduel-clue-list']);
 
     foreach ($clues['across'] as $clue) {
         $issolved = isset($solvedwordids[$clue['wordid']]);
-        $status = $issolved ? 'Solved' : 'Unsolved';
+        $status = $issolved ? get_string('solved', 'crossduel') : get_string('unsolved', 'crossduel');
         $tick = $issolved ? html_writer::tag('span', '✓', ['class' => 'crossduel-tick']) : '';
 
         $text = $tick .
@@ -1892,7 +1904,7 @@ if (empty($clues['across'])) {
             s($clue['clue']) .
             html_writer::tag(
                 'div',
-                'Answer length: ' . $clue['length'] . ' | Status: ' . $status,
+                get_string('answerlengthstatus', 'crossduel', ['length' => $clue['length'], 'status' => $status]),
                 ['class' => 'crossduel-meta']
             );
 
@@ -1904,16 +1916,16 @@ if (empty($clues['across'])) {
 echo html_writer::end_div();
 
 echo html_writer::start_div('crossduel-clue-section');
-echo html_writer::tag('h3', 'Down');
+echo html_writer::tag('h3', get_string('down', 'crossduel'));
 
 if (empty($clues['down'])) {
-    echo html_writer::tag('p', 'No Down clues in this approved layout.', ['class' => 'crossduel-note']);
+    echo html_writer::tag('p', get_string('no_down', 'crossduel'), ['class' => 'crossduel-note']);
 } else {
     echo html_writer::start_tag('ul', ['class' => 'crossduel-clue-list']);
 
     foreach ($clues['down'] as $clue) {
         $issolved = isset($solvedwordids[$clue['wordid']]);
-        $status = $issolved ? 'Solved' : 'Unsolved';
+        $status = $issolved ? get_string('solved', 'crossduel') : get_string('unsolved', 'crossduel');
         $tick = $issolved ? html_writer::tag('span', '✓', ['class' => 'crossduel-tick']) : '';
 
         $text = $tick .
@@ -1921,7 +1933,7 @@ if (empty($clues['down'])) {
             s($clue['clue']) .
             html_writer::tag(
                 'div',
-                'Answer length: ' . $clue['length'] . ' | Status: ' . $status,
+                get_string('answerlengthstatus', 'crossduel', ['length' => $clue['length'], 'status' => $status]),
                 ['class' => 'crossduel-meta']
             );
 
@@ -1942,21 +1954,21 @@ echo html_writer::end_div(); // clues card
 echo html_writer::start_div();
 
 echo html_writer::start_div('crossduel-board-card');
-echo $OUTPUT->heading('Your puzzle board', 3);
+echo $OUTPUT->heading(get_string('yourpuzzleboard', 'crossduel'), 3);
 
 if (empty($matrix)) {
-    echo html_writer::tag('p', 'No grid could be reconstructed from the saved layout.', ['class' => 'crossduel-note']);
+    echo html_writer::tag('p', get_string('nogridreconstructed', 'crossduel'), ['class' => 'crossduel-note']);
 } else {
     if ($currentmultiplayergame && in_array($currentmultiplayergame->status, ['active', 'completed'])) {
         echo html_writer::tag(
             'p',
-            'Numbered cells mark the start of clues. Blue-tinted cells are prefilled clue letters. The board is visible in read-only multiplayer mode and updates when you refresh.',
+            get_string('boardnote_multiplayer', 'crossduel'),
             ['class' => 'crossduel-note']
         );
     } else {
         echo html_writer::tag(
             'p',
-            'Numbered cells mark the start of clues. Blue-tinted cells are prefilled clue letters. Hidden cells will become visible when you solve a word.',
+            get_string('boardnote_single', 'crossduel'),
             ['class' => 'crossduel-note']
         );
     }
@@ -2022,14 +2034,14 @@ echo html_writer::end_div();
 
 if (!$allwordssolved && !($currentmultiplayergame && in_array($currentmultiplayergame->status, ['active', 'completed']))) {
     echo html_writer::start_div('crossduel-answer-card');
-    echo $OUTPUT->heading('Single-player action panel', 3);
+    echo $OUTPUT->heading(get_string('singleplayerpanel', 'crossduel'), 3);
 
     $solvedcount = count($solvedwordids);
     $totalcount = count($layoutrows);
 
     echo html_writer::tag(
         'p',
-        'Solved words: ' . $solvedcount . ' of ' . $totalcount . '.',
+        get_string('solvedwordsprogress', 'crossduel', ['solved' => $solvedcount, 'total' => $totalcount]),
         ['class' => 'crossduel-progress-note']
     );
 
@@ -2045,7 +2057,7 @@ if (!$allwordssolved && !($currentmultiplayergame && in_array($currentmultiplaye
         'value' => sesskey(),
     ]);
 
-    echo html_writer::tag('label', 'Choose clue', ['for' => 'wordid']);
+    echo html_writer::tag('label', get_string('chooseclue', 'crossduel'), ['for' => 'wordid']);
     echo html_writer::start_tag('select', [
         'name' => 'wordid',
         'id' => 'wordid',
@@ -2067,7 +2079,7 @@ if (!$allwordssolved && !($currentmultiplayergame && in_array($currentmultiplaye
 
     echo html_writer::end_tag('select');
 
-    echo html_writer::tag('label', 'Your answer', ['for' => 'useranswer']);
+    echo html_writer::tag('label', get_string('youranswer', 'crossduel'), ['for' => 'useranswer']);
     echo html_writer::empty_tag('input', [
         'type' => 'text',
         'name' => 'useranswer',
@@ -2079,7 +2091,7 @@ if (!$allwordssolved && !($currentmultiplayergame && in_array($currentmultiplaye
     echo html_writer::empty_tag('input', [
         'type' => 'submit',
         'name' => 'submitanswer',
-        'value' => 'Submit answer',
+        'value' => get_string('submitanswer', 'crossduel'),
         'class' => 'btn btn-primary',
     ]);
 
@@ -2092,21 +2104,21 @@ if ($currentmultiplayergame && $currentmultiplayergame->status === 'active' && !
     $ismyturn = ((int)$currentmultiplayergame->currentturn === (int)$USER->id);
 
     echo html_writer::start_div('crossduel-answer-card');
-    echo $OUTPUT->heading('Multiplayer action panel', 3);
-    echo html_writer::tag('p', 'Your multiplayer role: ' . s($rolelabel) . '.');
+    echo $OUTPUT->heading(get_string('multiplayerpanel', 'crossduel'), 3);
+    echo html_writer::tag('p', get_string('yourmultiplayerrole', 'crossduel', s($rolelabel)));
     echo html_writer::tag(
         'p',
-        $ismyturn ? 'It is your turn. You may answer one clue from your own direction.' : 'It is not your turn yet. Refresh after the other player moves.',
+        $ismyturn ? get_string('mp_turn_yes', 'crossduel') : get_string('mp_turn_no', 'crossduel'),
         ['class' => 'crossduel-progress-note']
     );
 
     if ($multiplayerallsolved) {
-        echo html_writer::tag('p', 'All multiplayer clues are solved.', ['class' => 'crossduel-small-note']);
+        echo html_writer::tag('p', get_string('mp_all_solved', 'crossduel'), ['class' => 'crossduel-small-note']);
     } else if (empty($multiplayerclueselectoptions)) {
-        echo html_writer::tag('p', 'No unsolved clues remain in your direction.', ['class' => 'crossduel-small-note']);
-        echo html_writer::tag('p', 'The remaining clues belong to the other player. Refresh after they move.', ['class' => 'crossduel-small-note']);
+        echo html_writer::tag('p', get_string('mp_none_in_direction', 'crossduel'), ['class' => 'crossduel-small-note']);
+        echo html_writer::tag('p', get_string('mp_remaining_other', 'crossduel'), ['class' => 'crossduel-small-note']);
     } else if (!$ismyturn) {
-        echo html_writer::tag('p', 'Refresh this page when it becomes your turn.', ['class' => 'crossduel-small-note']);
+        echo html_writer::tag('p', get_string('mp_refresh_your_turn', 'crossduel'), ['class' => 'crossduel-small-note']);
     } else {
         echo html_writer::start_tag('form', [
             'method' => 'post',
@@ -2120,7 +2132,7 @@ if ($currentmultiplayergame && $currentmultiplayergame->status === 'active' && !
             'value' => sesskey(),
         ]);
 
-        echo html_writer::tag('label', 'Choose your clue', ['for' => 'wordid']);
+        echo html_writer::tag('label', get_string('chooseyourclue', 'crossduel'), ['for' => 'wordid']);
         echo html_writer::start_tag('select', [
             'name' => 'wordid',
             'id' => 'wordid',
@@ -2142,7 +2154,7 @@ if ($currentmultiplayergame && $currentmultiplayergame->status === 'active' && !
 
         echo html_writer::end_tag('select');
 
-        echo html_writer::tag('label', 'Your answer', ['for' => 'useranswer']);
+        echo html_writer::tag('label', get_string('youranswer', 'crossduel'), ['for' => 'useranswer']);
         echo html_writer::empty_tag('input', [
             'type' => 'text',
             'name' => 'useranswer',
@@ -2154,7 +2166,7 @@ if ($currentmultiplayergame && $currentmultiplayergame->status === 'active' && !
         echo html_writer::empty_tag('input', [
             'type' => 'submit',
             'name' => 'submitmultiplayeranswer',
-            'value' => 'Submit multiplayer answer',
+            'value' => get_string('submitmultiplayeranswer', 'crossduel'),
             'class' => 'btn btn-primary',
         ]);
 
@@ -2168,16 +2180,16 @@ if ($currentmultiplayergame && $currentmultiplayergame->status === 'completed') 
     $rolelabel = crossduel_view_get_multiplayer_role_label($currentmultiplayergame, (int)$USER->id);
 
     echo html_writer::start_div('crossduel-answer-card');
-    echo $OUTPUT->heading('Multiplayer completed', 3);
-    echo html_writer::tag('p', 'Your multiplayer role: ' . s($rolelabel) . '.');
+    echo $OUTPUT->heading(get_string('multiplayercompleted', 'crossduel'), 3);
+    echo html_writer::tag('p', get_string('yourmultiplayerrole', 'crossduel', s($rolelabel)));
     echo html_writer::tag(
         'p',
-        'No further answers are needed. This shared puzzle has been completed successfully.',
+        get_string('mp_no_further_answers', 'crossduel'),
         ['class' => 'crossduel-progress-note']
     );
     echo html_writer::tag(
         'p',
-        'You may refresh to confirm the final shared board and grade state, but the activity will remain in multiplayer completion view rather than dropping back to solo mode.',
+        get_string('mp_refresh_confirm', 'crossduel'),
         ['class' => 'crossduel-small-note']
     );
     echo html_writer::end_div();
