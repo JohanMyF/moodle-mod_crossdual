@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<XMLDB PATH="mod/crossduel/db" VERSION="2026040101" COMMENT="XMLDB file for mod_crossduel"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:noNamespaceSchemaLocation="../../../lib/xmldb/xmldb.xsd"
+>
+    <TABLES>
+
+        <TABLE NAME="crossduel" COMMENT="Main table for Cross Duel activity instances">
+            <FIELDS>
+                <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true" COMMENT="Primary key"/>
+                <FIELD NAME="course" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="Course id"/>
+                <FIELD NAME="name" TYPE="char" LENGTH="255" NOTNULL="true" COMMENT="Activity name"/>
+                <FIELD NAME="intro" TYPE="text" NOTNULL="false" COMMENT="Activity introduction"/>
+                <FIELD NAME="introformat" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="0" COMMENT="Format of intro field"/>
+
+                <FIELD NAME="wordlist" TYPE="text" NOTNULL="false" COMMENT="Raw teacher-entered word list in word|clue format"/>
+                <FIELD NAME="revealpercent" TYPE="number" LENGTH="5" DECIMALS="2" NOTNULL="true" DEFAULT="10.00" COMMENT="Percentage of letters revealed before play begins"/>
+                <FIELD NAME="passpercentage" TYPE="number" LENGTH="5" DECIMALS="2" NOTNULL="true" DEFAULT="60.00" COMMENT="Passing percentage required for success"/>
+                <FIELD NAME="grade" TYPE="number" LENGTH="10" DECIMALS="2" NOTNULL="true" DEFAULT="100.00" COMMENT="Maximum grade for the activity"/>
+
+                <FIELD NAME="layoutapproved" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" COMMENT="Whether a puzzle layout has been previewed and approved"/>
+                <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="Time created"/>
+                <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="Time modified"/>
+            </FIELDS>
+
+            <KEYS>
+                <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+            </KEYS>
+
+            <INDEXES>
+                <INDEX NAME="course_idx" UNIQUE="false" FIELDS="course"/>
+            </INDEXES>
+        </TABLE>
+
+        <TABLE NAME="crossduel_word" COMMENT="Stores parsed teacher-authored words and clues for a Cross Duel activity">
+            <FIELDS>
+                <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true" COMMENT="Primary key"/>
+                <FIELD NAME="crossduelid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="Reference to crossduel activity instance"/>
+                <FIELD NAME="rawword" TYPE="char" LENGTH="255" NOTNULL="true" COMMENT="Original word as entered by the teacher"/>
+                <FIELD NAME="normalizedword" TYPE="char" LENGTH="255" NOTNULL="true" COMMENT="Normalized word used for layout and checking"/>
+                <FIELD NAME="cluetext" TYPE="text" NOTNULL="false" COMMENT="Teacher-authored clue text"/>
+                <FIELD NAME="wordlength" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="Length of normalized word"/>
+                <FIELD NAME="sortorder" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="Teacher entry order"/>
+                <FIELD NAME="enabled" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="1" COMMENT="Whether this word is currently enabled"/>
+            </FIELDS>
+
+            <KEYS>
+                <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+            </KEYS>
+
+            <INDEXES>
+                <INDEX NAME="crossduelid_idx" UNIQUE="false" FIELDS="crossduelid"/>
+            </INDEXES>
+        </TABLE>
+
+        <TABLE NAME="crossduel_layoutslot" COMMENT="Stores approved word placements in the generated puzzle layout">
+            <FIELDS>
+                <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true" COMMENT="Primary key"/>
+                <FIELD NAME="crossduelid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="Reference to crossduel activity instance"/>
+                <FIELD NAME="wordid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="Reference to crossduel_word"/>
+                <FIELD NAME="direction" TYPE="char" LENGTH="1" NOTNULL="true" DEFAULT="H" COMMENT="Placement direction H or V"/>
+                <FIELD NAME="startrow" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="Starting row of the placed word"/>
+                <FIELD NAME="startcol" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="Starting column of the placed word"/>
+                <FIELD NAME="cluenumber" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="Displayed clue number"/>
+                <FIELD NAME="placementorder" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="Order in which the generator placed the word"/>
+                <FIELD NAME="isactive" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="1" COMMENT="Whether this layout row is part of the current approved puzzle"/>
+            </FIELDS>
+
+            <KEYS>
+                <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+            </KEYS>
+
+            <INDEXES>
+                <INDEX NAME="crossduelid_idx" UNIQUE="false" FIELDS="crossduelid"/>
+                <INDEX NAME="wordid_idx" UNIQUE="false" FIELDS="wordid"/>
+            </INDEXES>
+        </TABLE>
+
+        <TABLE NAME="crossduel_game" COMMENT="Stores two-player Cross Duel game sessions">
+            <FIELDS>
+                <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true" COMMENT="Primary key"/>
+                <FIELD NAME="crossduelid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="Reference to crossduel activity instance"/>
+
+                <FIELD NAME="playera" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="User id of Player A"/>
+                <FIELD NAME="playerb" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="User id of Player B"/>
+                <FIELD NAME="horizontalplayer" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="User id assigned horizontal clues"/>
+                <FIELD NAME="verticalplayer" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="User id assigned vertical clues"/>
+                <FIELD NAME="currentturn" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="User id whose turn it is"/>
+
+                <FIELD NAME="status" TYPE="char" LENGTH="20" NOTNULL="true" DEFAULT="waiting" COMMENT="Game status such as invited active finished expired abandoned"/>
+                <FIELD NAME="boardstatejson" TYPE="text" NOTNULL="false" COMMENT="JSON representation of the current shared board state"/>
+                <FIELD NAME="revealedcellsjson" TYPE="text" NOTNULL="false" COMMENT="JSON representation of prefilled clue cells"/>
+                <FIELD NAME="solvedwordsjson" TYPE="text" NOTNULL="false" COMMENT="JSON representation of solved word ids"/>
+                <FIELD NAME="playerascore" TYPE="number" LENGTH="10" DECIMALS="2" NOTNULL="true" DEFAULT="0.00" COMMENT="Score for Player A"/>
+                <FIELD NAME="playerbscore" TYPE="number" LENGTH="10" DECIMALS="2" NOTNULL="true" DEFAULT="0.00" COMMENT="Score for Player B"/>
+
+                <FIELD NAME="lastmove" TYPE="text" NOTNULL="false" COMMENT="Readable summary of the most recent move"/>
+                <FIELD NAME="lastplayer" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="User id of learner who made the most recent move"/>
+                <FIELD NAME="lastmovetime" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="Unix timestamp of most recent move"/>
+
+                <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="Time created"/>
+                <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="Time modified"/>
+            </FIELDS>
+
+            <KEYS>
+                <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+            </KEYS>
+
+            <INDEXES>
+                <INDEX NAME="crossduelid_idx" UNIQUE="false" FIELDS="crossduelid"/>
+                <INDEX NAME="playera_idx" UNIQUE="false" FIELDS="playera"/>
+                <INDEX NAME="playerb_idx" UNIQUE="false" FIELDS="playerb"/>
+                <INDEX NAME="currentturn_idx" UNIQUE="false" FIELDS="currentturn"/>
+            </INDEXES>
+        </TABLE>
+
+        <TABLE NAME="crossduel_move" COMMENT="Stores individual moves made during a Cross Duel game">
+            <FIELDS>
+                <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true" COMMENT="Primary key"/>
+                <FIELD NAME="gameid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="Reference to crossduel_game"/>
+                <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="User who made the move"/>
+                <FIELD NAME="wordid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="Word that was attempted"/>
+                <FIELD NAME="direction" TYPE="char" LENGTH="1" NOTNULL="true" DEFAULT="H" COMMENT="Word direction H or V"/>
+                <FIELD NAME="submittedanswer" TYPE="text" NOTNULL="false" COMMENT="Answer submitted by the player"/>
+                <FIELD NAME="correct" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" COMMENT="Whether the submitted answer was correct"/>
+                <FIELD NAME="pointsawarded" TYPE="number" LENGTH="10" DECIMALS="2" NOTNULL="true" DEFAULT="0.00" COMMENT="Points awarded for the move"/>
+                <FIELD NAME="movesummary" TYPE="text" NOTNULL="false" COMMENT="Readable summary of the move"/>
+                <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="Time move was created"/>
+            </FIELDS>
+
+            <KEYS>
+                <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+            </KEYS>
+
+            <INDEXES>
+                <INDEX NAME="gameid_idx" UNIQUE="false" FIELDS="gameid"/>
+                <INDEX NAME="userid_idx" UNIQUE="false" FIELDS="userid"/>
+                <INDEX NAME="wordid_idx" UNIQUE="false" FIELDS="wordid"/>
+            </INDEXES>
+        </TABLE>
+
+        <TABLE NAME="crossduel_attempt" COMMENT="Stores one single-player attempt per user per Cross Duel activity">
+            <FIELDS>
+                <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true" COMMENT="Primary key"/>
+                <FIELD NAME="crossduelid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="Reference to crossduel activity instance"/>
+                <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="User attempting the puzzle"/>
+                <FIELD NAME="status" TYPE="char" LENGTH="20" NOTNULL="true" DEFAULT="inprogress" COMMENT="Attempt status such as inprogress or completed"/>
+                <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="Time created"/>
+                <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="Time modified"/>
+            </FIELDS>
+
+            <KEYS>
+                <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+            </KEYS>
+
+            <INDEXES>
+                <INDEX NAME="crossduelid_idx" UNIQUE="false" FIELDS="crossduelid"/>
+                <INDEX NAME="userid_idx" UNIQUE="false" FIELDS="userid"/>
+                <INDEX NAME="crossduel_user_idx" UNIQUE="true" FIELDS="crossduelid, userid"/>
+            </INDEXES>
+        </TABLE>
+
+        <TABLE NAME="crossduel_attempt_word" COMMENT="Stores per-word solve state within a single-player Cross Duel attempt">
+            <FIELDS>
+                <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true" COMMENT="Primary key"/>
+                <FIELD NAME="attemptid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="Reference to crossduel_attempt"/>
+                <FIELD NAME="wordid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="Reference to crossduel_word"/>
+                <FIELD NAME="issolved" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" COMMENT="Whether the word has been solved correctly"/>
+                <FIELD NAME="useranswer" TYPE="text" NOTNULL="false" COMMENT="Most recent answer submitted by the user for this word"/>
+                <FIELD NAME="timeanswered" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="Time of the most recent answer submission"/>
+            </FIELDS>
+
+            <KEYS>
+                <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+            </KEYS>
+
+            <INDEXES>
+                <INDEX NAME="attemptid_idx" UNIQUE="false" FIELDS="attemptid"/>
+                <INDEX NAME="wordid_idx" UNIQUE="false" FIELDS="wordid"/>
+                <INDEX NAME="attempt_word_idx" UNIQUE="true" FIELDS="attemptid, wordid"/>
+            </INDEXES>
+        </TABLE>
+
+        <TABLE NAME="crossduel_presence" COMMENT="Tracks which users have recently opened a specific Cross Duel activity">
+            <FIELDS>
+                <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true" COMMENT="Primary key"/>
+                <FIELD NAME="crossduelid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="Reference to crossduel activity instance"/>
+                <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="User currently present in this activity"/>
+                <FIELD NAME="lastseen" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" COMMENT="Unix timestamp when the user was last seen in this activity"/>
+            </FIELDS>
+
+            <KEYS>
+                <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+            </KEYS>
+
+            <INDEXES>
+                <INDEX NAME="crossduelid_idx" UNIQUE="false" FIELDS="crossduelid"/>
+                <INDEX NAME="userid_idx" UNIQUE="false" FIELDS="userid"/>
+                <INDEX NAME="lastseen_idx" UNIQUE="false" FIELDS="lastseen"/>
+                <INDEX NAME="crossduel_user_uix" UNIQUE="true" FIELDS="crossduelid, userid"/>
+            </INDEXES>
+        </TABLE>
+
+    </TABLES>
+</XMLDB>
