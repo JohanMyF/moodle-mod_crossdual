@@ -15,14 +15,13 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * [Short description of what this file does]
+ * Privacy provider for mod_crossduel.
  *
  * @package    mod_crossduel
  * @author     Johan Venter <johan@myfutureway.co.za>
  * @copyright  2026 Johan Venter
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-
 
 namespace mod_crossduel\privacy;
 
@@ -160,186 +159,179 @@ class provider implements
      * @param approved_contextlist $contextlist
      * @return void
      */
-public static function export_user_data(approved_contextlist $contextlist): void {
-    global $DB;
+    public static function export_user_data(approved_contextlist $contextlist): void {
+        global $DB;
 
-    $userid = $contextlist->get_user()->id;
+        $userid = $contextlist->get_user()->id;
 
-    // Step 1: Collect all crossduelids first
-    $crossduelids = [];
-    $contextmap = [];
-
-    foreach ($contextlist as $context) {
-        $crossduelid = self::get_crossduelid_from_context($context);
-        if ($crossduelid) {
-            $crossduelids[] = $crossduelid;
-            $contextmap[$crossduelid] = $context;
+        $contexts = [];
+        foreach ($contextlist as $context) {
+            if ($context instanceof context_module) {
+                $contexts[$context->id] = $context;
+            }
         }
-    }
 
-    if (empty($crossduelids)) {
-        return;
-    }
+        if (empty($contexts)) {
+            return;
+        }
 
-    list($insql, $params) = $DB->get_in_or_equal($crossduelids, SQL_PARAMS_NAMED);
+        $contexttocrossduel = self::get_crossduelids_from_contexts($contexts);
+        if (empty($contexttocrossduel)) {
+            return;
+        }
 
-    // Step 2: Preload all data in bulk
+        $crossduelids = array_values(array_unique($contexttocrossduel));
+        list($insql, $params) = $DB->get_in_or_equal($crossduelids, SQL_PARAMS_NAMED);
 
-    // Attempts
-    $attempts = $DB->get_records_select(
-        'crossduel_attempt',
-        "crossduelid $insql AND userid = :userid",
-        $params + ['userid' => $userid],
-        'id ASC'
-    );
-
-    $attemptids = array_keys($attempts);
-
-    // Attempt words
-    $attemptwords = [];
-    if ($attemptids) {
-        list($ainsql, $aparams) = $DB->get_in_or_equal($attemptids, SQL_PARAMS_NAMED);
-        $attemptwords = $DB->get_records_select(
-            'crossduel_attempt_word',
-            "attemptid $ainsql",
-            $aparams,
+        $attempts = $DB->get_records_select(
+            'crossduel_attempt',
+            "crossduelid $insql AND userid = :userid",
+            $params + ['userid' => $userid],
             'id ASC'
         );
-    }
+        $attemptids = array_keys($attempts);
 
-    // Group attempt words
-    $attemptwordmap = [];
-    foreach ($attemptwords as $word) {
-        $attemptwordmap[$word->attemptid][] = $word;
-    }
+        $attemptwords = [];
+        if ($attemptids) {
+            list($ainsql, $aparams) = $DB->get_in_or_equal($attemptids, SQL_PARAMS_NAMED);
+            $attemptwords = $DB->get_records_select(
+                'crossduel_attempt_word',
+                "attemptid $ainsql",
+                $aparams,
+                'id ASC'
+            );
+        }
 
-    // Games
-    $games = $DB->get_records_select(
-        'crossduel_game',
-        "crossduelid $insql AND (playera = :userid1 OR playerb = :userid2)",
-        $params + ['userid1' => $userid, 'userid2' => $userid],
-        'id ASC'
-    );
+        $attemptwordmap = [];
+        foreach ($attemptwords as $word) {
+            $attemptwordmap[$word->attemptid][] = $word;
+        }
 
-    $gameids = array_keys($games);
-
-    // Moves
-    $moves = [];
-    if ($gameids) {
-        list($ginsql, $gparams) = $DB->get_in_or_equal($gameids, SQL_PARAMS_NAMED);
-        $moves = $DB->get_records_select(
-            'crossduel_move',
-            "gameid $ginsql AND userid = :userid",
-            $gparams + ['userid' => $userid],
+        $games = $DB->get_records_select(
+            'crossduel_game',
+            "crossduelid $insql AND (playera = :userid1 OR playerb = :userid2)",
+            $params + ['userid1' => $userid, 'userid2' => $userid],
             'id ASC'
         );
-    }
+        $gameids = array_keys($games);
 
-    // Group moves
-    $movemap = [];
-    foreach ($moves as $move) {
-        $movemap[$move->gameid][] = $move;
-    }
+        $moves = [];
+        if ($gameids) {
+            list($ginsql, $gparams) = $DB->get_in_or_equal($gameids, SQL_PARAMS_NAMED);
+            $moves = $DB->get_records_select(
+                'crossduel_move',
+                "gameid $ginsql AND userid = :userid",
+                $gparams + ['userid' => $userid],
+                'id ASC'
+            );
+        }
 
-    // Presence
-    $presence = $DB->get_records_select(
-        'crossduel_presence',
-        "crossduelid $insql AND userid = :userid",
-        $params + ['userid' => $userid]
-    );
+        $movemap = [];
+        foreach ($moves as $move) {
+            $movemap[$move->gameid][] = $move;
+        }
 
-    // Step 3: Export per context
+        $presence = $DB->get_records_select(
+            'crossduel_presence',
+            "crossduelid $insql AND userid = :userid",
+            $params + ['userid' => $userid]
+        );
+        $presencemap = [];
+        foreach ($presence as $record) {
+            $presencemap[$record->crossduelid] = $record;
+        }
 
-    foreach ($crossduelids as $crossduelid) {
-        $context = $contextmap[$crossduelid];
-
-        // Attempts
-        $attemptexport = [];
-        foreach ($attempts as $attempt) {
-            if ($attempt->crossduelid != $crossduelid) {
+        foreach ($contexts as $contextid => $context) {
+            if (empty($contexttocrossduel[$contextid])) {
                 continue;
             }
 
-            $attemptitem = [
-                'status' => $attempt->status,
-                'timecreated' => transform::datetime($attempt->timecreated),
-                'timemodified' => transform::datetime($attempt->timemodified),
-                'words' => [],
-            ];
+            $crossduelid = $contexttocrossduel[$contextid];
 
-            if (!empty($attemptwordmap[$attempt->id])) {
-                foreach ($attemptwordmap[$attempt->id] as $word) {
-                    $attemptitem['words'][] = [
-                        'wordid' => (int)$word->wordid,
-                        'issolved' => (int)$word->issolved,
-                        'useranswer' => $word->useranswer,
-                        'timeanswered' => transform::datetime($word->timeanswered),
-                    ];
+            $attemptexport = [];
+            foreach ($attempts as $attempt) {
+                if ((int)$attempt->crossduelid !== (int)$crossduelid) {
+                    continue;
                 }
-            }
 
-            $attemptexport[] = $attemptitem;
-        }
+                $attemptitem = [
+                    'status' => $attempt->status,
+                    'timecreated' => transform::datetime($attempt->timecreated),
+                    'timemodified' => transform::datetime($attempt->timemodified),
+                    'words' => [],
+                ];
 
-        // Games
-        $gameexport = [];
-        foreach ($games as $game) {
-            if ($game->crossduelid != $crossduelid) {
-                continue;
-            }
-
-            $role = '';
-            if ((int)$game->playera === $userid) {
-                $role = 'playera';
-            } else if ((int)$game->playerb === $userid) {
-                $role = 'playerb';
-            }
-
-            $gameitem = [
-                'gameid' => (int)$game->id,
-                'yourrole' => $role,
-                'status' => $game->status,
-                'timecreated' => transform::datetime($game->timecreated),
-                'timemodified' => transform::datetime($game->timemodified),
-                'lastmove' => $game->lastmove,
-                'lastmovetime' => transform::datetime($game->lastmovetime),
-                'movesmadebyyou' => [],
-            ];
-
-            if (!empty($movemap[$game->id])) {
-                foreach ($movemap[$game->id] as $move) {
-                    $gameitem['movesmadebyyou'][] = [
-                        'wordid' => (int)$move->wordid,
-                        'direction' => $move->direction,
-                        'submittedanswer' => $move->submittedanswer,
-                        'correct' => (int)$move->correct,
-                        'pointsawarded' => (float)$move->pointsawarded,
-                        'movesummary' => $move->movesummary,
-                        'timecreated' => transform::datetime($move->timecreated),
-                    ];
+                if (!empty($attemptwordmap[$attempt->id])) {
+                    foreach ($attemptwordmap[$attempt->id] as $word) {
+                        $attemptitem['words'][] = [
+                            'wordid' => (int)$word->wordid,
+                            'issolved' => (int)$word->issolved,
+                            'useranswer' => $word->useranswer,
+                            'timeanswered' => transform::datetime($word->timeanswered),
+                        ];
+                    }
                 }
+
+                $attemptexport[] = $attemptitem;
             }
 
-            $gameexport[] = $gameitem;
-        }
+            $gameexport = [];
+            foreach ($games as $game) {
+                if ((int)$game->crossduelid !== (int)$crossduelid) {
+                    continue;
+                }
 
-        // Presence
-        $presenceexport = null;
-        if (!empty($presence[$crossduelid])) {
-            $presenceexport = [
-                'lastseen' => transform::datetime($presence[$crossduelid]->lastseen),
+                $role = '';
+                if ((int)$game->playera === (int)$userid) {
+                    $role = 'playera';
+                } else if ((int)$game->playerb === (int)$userid) {
+                    $role = 'playerb';
+                }
+
+                $gameitem = [
+                    'gameid' => (int)$game->id,
+                    'yourrole' => $role,
+                    'status' => $game->status,
+                    'timecreated' => transform::datetime($game->timecreated),
+                    'timemodified' => transform::datetime($game->timemodified),
+                    'lastmove' => $game->lastmove,
+                    'lastmovetime' => transform::datetime($game->lastmovetime),
+                    'movesmadebyyou' => [],
+                ];
+
+                if (!empty($movemap[$game->id])) {
+                    foreach ($movemap[$game->id] as $move) {
+                        $gameitem['movesmadebyyou'][] = [
+                            'wordid' => (int)$move->wordid,
+                            'direction' => $move->direction,
+                            'submittedanswer' => $move->submittedanswer,
+                            'correct' => (int)$move->correct,
+                            'pointsawarded' => (float)$move->pointsawarded,
+                            'movesummary' => $move->movesummary,
+                            'timecreated' => transform::datetime($move->timecreated),
+                        ];
+                    }
+                }
+
+                $gameexport[] = $gameitem;
+            }
+
+            $presenceexport = null;
+            if (!empty($presencemap[$crossduelid])) {
+                $presenceexport = [
+                    'lastseen' => transform::datetime($presencemap[$crossduelid]->lastseen),
+                ];
+            }
+
+            $data = (object) [
+                'attempts' => $attemptexport,
+                'games' => $gameexport,
+                'presence' => $presenceexport,
             ];
+
+            writer::with_context($context)->export_data([], $data);
         }
-
-        $data = (object)[
-            'attempts' => $attemptexport,
-            'games' => $gameexport,
-            'presence' => $presenceexport,
-        ];
-
-        writer::with_context($context)->export_data([], $data);
     }
-}
 
     /**
      * Delete all user data for all users in a context.
@@ -383,13 +375,20 @@ public static function export_user_data(approved_contextlist $contextlist): void
     public static function delete_data_for_user(approved_contextlist $contextlist): void {
         $userid = $contextlist->get_user()->id;
 
+        $contexts = [];
         foreach ($contextlist as $context) {
-            $crossduelid = self::get_crossduelid_from_context($context);
-            if (!$crossduelid) {
-                continue;
+            if ($context instanceof context_module) {
+                $contexts[$context->id] = $context;
             }
+        }
 
-            self::delete_user_data_in_activity($crossduelid, $userid);
+        if (empty($contexts)) {
+            return;
+        }
+
+        $contexttocrossduel = self::get_crossduelids_from_contexts($contexts);
+        foreach ($contexttocrossduel as $crossduelid) {
+            self::delete_user_data_in_activity((int)$crossduelid, (int)$userid);
         }
     }
 
@@ -458,15 +457,86 @@ public static function export_user_data(approved_contextlist $contextlist): void
      * @return void
      */
     public static function delete_data_for_users(approved_userlist $userlist): void {
+        global $DB;
+
         $context = $userlist->get_context();
         $crossduelid = self::get_crossduelid_from_context($context);
         if (!$crossduelid) {
             return;
         }
 
-        foreach ($userlist->get_userids() as $userid) {
-            self::delete_user_data_in_activity($crossduelid, (int)$userid);
+        $userids = array_map('intval', $userlist->get_userids());
+        if (empty($userids)) {
+            return;
         }
+
+        list($uinsql, $uparams) = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED);
+
+        $attempts = $DB->get_records_select(
+            'crossduel_attempt',
+            "crossduelid = :crossduelid AND userid $uinsql",
+            ['crossduelid' => $crossduelid] + $uparams
+        );
+
+        if ($attempts) {
+            $attemptids = array_keys($attempts);
+            list($ainsql, $aparams) = $DB->get_in_or_equal($attemptids, SQL_PARAMS_NAMED);
+            $DB->delete_records_select('crossduel_attempt_word', "attemptid $ainsql", $aparams);
+        }
+
+        $DB->delete_records_select(
+            'crossduel_attempt',
+            "crossduelid = :crossduelid AND userid $uinsql",
+            ['crossduelid' => $crossduelid] + $uparams
+        );
+
+        $games = $DB->get_records_select(
+            'crossduel_game',
+            "crossduelid = :crossduelid AND (playera $uinsql OR playerb $uinsql)",
+            ['crossduelid' => $crossduelid] + $uparams
+        );
+
+        if ($games) {
+            $gameids = array_keys($games);
+            list($ginsql, $gparams) = $DB->get_in_or_equal($gameids, SQL_PARAMS_NAMED);
+            list($muinsql, $muparams) = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED);
+
+            $DB->delete_records_select(
+                'crossduel_move',
+                "gameid $ginsql AND userid $muinsql",
+                $gparams + $muparams
+            );
+
+            foreach ($games as $game) {
+                if (in_array((int)$game->playera, $userids, true)) {
+                    $game->playera = 0;
+                }
+                if (in_array((int)$game->playerb, $userids, true)) {
+                    $game->playerb = 0;
+                }
+                if (in_array((int)$game->horizontalplayer, $userids, true)) {
+                    $game->horizontalplayer = 0;
+                }
+                if (in_array((int)$game->verticalplayer, $userids, true)) {
+                    $game->verticalplayer = 0;
+                }
+                if (in_array((int)$game->currentturn, $userids, true)) {
+                    $game->currentturn = 0;
+                }
+                if (in_array((int)$game->lastplayer, $userids, true)) {
+                    $game->lastplayer = 0;
+                }
+
+                $game->timemodified = time();
+                $DB->update_record('crossduel_game', $game);
+            }
+        }
+
+        $DB->delete_records_select(
+            'crossduel_presence',
+            "crossduelid = :crossduelid AND userid $uinsql",
+            ['crossduelid' => $crossduelid] + $uparams
+        );
     }
 
     /**
@@ -545,6 +615,55 @@ public static function export_user_data(approved_contextlist $contextlist): void
     }
 
     /**
+     * Resolve Cross Duel instance ids for multiple module contexts.
+     *
+     * @param array $contexts
+     * @return array
+     */
+    protected static function get_crossduelids_from_contexts(array $contexts): array {
+        global $DB;
+
+        $contexttocrossduel = [];
+        $cmids = [];
+
+        foreach ($contexts as $contextid => $context) {
+            if ($context instanceof context_module) {
+                $cmids[$contextid] = (int)$context->instanceid;
+            }
+        }
+
+        if (empty($cmids)) {
+            return $contexttocrossduel;
+        }
+
+        list($insql, $params) = $DB->get_in_or_equal(array_values($cmids), SQL_PARAMS_NAMED);
+
+        $sql = "
+            SELECT cm.id AS cmid, cm.instance
+              FROM {course_modules} cm
+              JOIN {modules} m
+                ON m.id = cm.module
+             WHERE cm.id $insql
+               AND m.name = :modname
+        ";
+
+        $records = $DB->get_records_sql($sql, $params + ['modname' => 'crossduel']);
+
+        $cmidtoinstance = [];
+        foreach ($records as $record) {
+            $cmidtoinstance[(int)$record->cmid] = (int)$record->instance;
+        }
+
+        foreach ($cmids as $contextid => $cmid) {
+            if (isset($cmidtoinstance[$cmid])) {
+                $contexttocrossduel[$contextid] = $cmidtoinstance[$cmid];
+            }
+        }
+
+        return $contexttocrossduel;
+    }
+
+    /**
      * Resolve the Cross Duel instance id from a module context.
      *
      * @param context $context
@@ -578,4 +697,3 @@ public static function export_user_data(approved_contextlist $contextlist): void
         return (int)$record->instance;
     }
 }
-
