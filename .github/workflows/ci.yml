@@ -24,10 +24,26 @@ jobs:
           extensions: curl, dom, gd, intl, json, mbstring, mysqli, soap, xml, xmlrpc, zip
           coverage: none
 
-      - name: Moodle plugin CI
-        uses: moodlehq/moodle-plugin-ci@main
-        with:
-          plugin-path: mod/crossduel
-          moodle-branch: ${{ matrix.moodle-branch }}
-          php-version: ${{ matrix.php-version }}
-          extra-plugins: ''
+      - name: Install Moodle Plugin CI
+        run: |
+          composer create-project moodlehq/moodle-plugin-ci ci ^4 --no-interaction
+
+      - name: Install Moodle
+        run: |
+          ./ci/bin/moodle-plugin-ci install --moodle=${{ matrix.moodle-branch }} --plugin=.
+
+      - name: Run code checker
+        run: |
+          ./ci/bin/moodle-plugin-ci phpcs
+
+      - name: Run PHP lint
+        run: |
+          ./ci/bin/moodle-plugin-ci phplint
+
+      - name: Run mustache lint
+        run: |
+          ./ci/bin/moodle-plugin-ci mustache
+
+      - name: Run PHPUnit
+        run: |
+          ./ci/bin/moodle-plugin-ci phpunit
