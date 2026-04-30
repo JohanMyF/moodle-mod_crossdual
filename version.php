@@ -40,7 +40,7 @@ $plugin->component = 'mod_crossduel';
  * Every time we later make a database schema change or a code upgrade
  * that Moodle must notice, we will increase this number.
  */
-$plugin->version = 2026040106;
+$plugin->version = 2026040280;
 
 /**
  * Minimum Moodle version required.
